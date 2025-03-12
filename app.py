@@ -5,6 +5,11 @@ from datetime import datetime
 import pandas as pd
 import base64
 import io
+# Add ReportLab imports for PDF generation
+from reportlab.lib.pagesizes import letter
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib import colors
 
 # Set page configuration
 st.set_page_config(
@@ -80,40 +85,110 @@ def check_right_to_work(code, forename, surname, dob, company_name, allow_studen
     except Exception as e:
         return None, f"Error connecting to API: {str(e)}"
 
-# Function to generate downloadable PDF (simplified as we can't create actual PDFs)
+# Function to generate downloadable PDF
 def generate_download_file(data, user_type):
-    # Create a DataFrame for easy CSV creation
-    if user_type == "employee":
-        df = pd.DataFrame({
-            "Name": [data["status"]["name"]],
-            "Right to Work Status": [data["status"]["outcome"]],
-            "Start Date": [data["status"]["start_date"]],
-            "Expiry Date": [data["status"]["expiry_date"] or "No expiry"],
-            "Details": [data["status"]["details"]],
-            "Conditions": [data["status"]["conditions"]],
-            "Checked On": [datetime.now().strftime("%d/%m/%Y %H:%M:%S")]
-        })
-    else:  # employer
-        df = pd.DataFrame({
-            "Employee Name": [data["status"]["name"]],
-            "Right to Work Status": [data["status"]["outcome"]],
-            "Start Date": [data["status"]["start_date"]],
-            "Expiry Date": [data["status"]["expiry_date"] or "No expiry"],
-            "Details": [data["status"]["details"]],
-            "Conditions": [data["status"]["conditions"]],
-            "Verification Date": [datetime.now().strftime("%d/%m/%Y %H:%M:%S")],
-            "Verified By": [st.session_state.get("company_name", "Employer")]
-        })
+    # Import required libraries for PDF generation
+    from reportlab.lib.pagesizes import letter
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib import colors
     
     # Create a buffer
     buffer = io.BytesIO()
-    df.to_csv(buffer, index=False)
+    
+    # Create the PDF document
+    doc = SimpleDocTemplate(buffer, pagesize=letter)
+    styles = getSampleStyleSheet()
+    
+    # Define custom styles
+    title_style = ParagraphStyle(
+        'Title',
+        parent=styles['Heading1'],
+        fontSize=16,
+        textColor=colors.darkblue,
+        spaceAfter=12
+    )
+    
+    header_style = ParagraphStyle(
+        'Header',
+        parent=styles['Heading2'],
+        fontSize=14,
+        textColor=colors.black,
+        spaceAfter=6
+    )
+    
+    normal_style = styles["Normal"]
+    
+    # Create the elements list to build the PDF
+    elements = []
+    
+    # Add title
+    if user_type == "employee":
+        elements.append(Paragraph("UK Right to Work Check - Employee Report", title_style))
+    else:
+        elements.append(Paragraph("UK Right to Work Check - Employer Verification", title_style))
+    
+    elements.append(Spacer(1, 12))
+    
+    # Add check details
+    elements.append(Paragraph("Check Details:", header_style))
+    
+    # Convert check data to table format
+    table_data = []
+    if user_type == "employee":
+        table_data = [
+            ["Name:", data["status"]["name"]],
+            ["Right to Work Status:", data["status"]["outcome"]],
+            ["Valid From:", data["status"]["start_date"]],
+            ["Expiry Date:", data["status"]["expiry_date"] or "No expiry"],
+            ["Conditions:", data["status"]["conditions"]],
+            ["Checked On:", datetime.now().strftime("%d/%m/%Y %H:%M:%S")]
+        ]
+    else:  # employer
+        table_data = [
+            ["Employee Name:", data["status"]["name"]],
+            ["Right to Work Status:", data["status"]["outcome"]],
+            ["Valid From:", data["status"]["start_date"]],
+            ["Expiry Date:", data["status"]["expiry_date"] or "No expiry"],
+            ["Conditions:", data["status"]["conditions"]],
+            ["Verification Date:", datetime.now().strftime("%d/%m/%Y %H:%M:%S")],
+            ["Verified By:", st.session_state.get("company_name", "Employer")]
+        ]
+    
+    # Create the table
+    table = Table(table_data, colWidths=[150, 350])
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (0, -1), colors.lightgrey),
+        ('TEXTCOLOR', (0, 0), (0, -1), colors.black),
+        ('ALIGN', (0, 0), (0, -1), 'LEFT'),
+        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (0, -1), 10),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+        ('BACKGROUND', (0, len(table_data)//2), (0, len(table_data)//2), colors.white),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+    ]))
+    elements.append(table)
+    
+    elements.append(Spacer(1, 12))
+    
+    # Add details section
+    elements.append(Paragraph("Additional Details:", header_style))
+    elements.append(Paragraph(data["status"]["details"], normal_style))
+    
+    elements.append(Spacer(1, 24))
+    
+    # Add disclaimer
+    elements.append(Paragraph("Disclaimer:", header_style))
+    elements.append(Paragraph("This document is a record of a right to work check performed through the UK Right to Work Checker application. For official verification, please visit the GOV.UK website.", normal_style))
+    
+    # Build the PDF
+    doc.build(elements)
     buffer.seek(0)
     
-    # Return the base64 encoded CSV
+    # Return the base64 encoded PDF
     b64 = base64.b64encode(buffer.read()).decode()
     
-    filename = f"right_to_work_{user_type}_{datetime.now().strftime('%Y%m%d%H%M%S')}.csv"
+    filename = f"right_to_work_{user_type}_{datetime.now().strftime('%Y%m%d%H%M%S')}.pdf"
     return b64, filename
 
 # Initialize session state for result storage
@@ -184,12 +259,9 @@ else:  # Employer
             forename = "John"
             surname = "Doe"
         
-        st.write("Additional Options:")
-        col3, col4 = st.columns(2)
-        with col3:
-            allow_student = st.checkbox("Allow Student Visa", value=True)
-        with col4:
-            allow_sponsorship = st.checkbox("Allow Sponsorship", value=True)
+        # Set default values for additional options
+        allow_student = True
+        allow_sponsorship = True
         
         submitted = st.form_submit_button("Verify Employee Status")
         
@@ -231,8 +303,8 @@ if st.session_state.get('check_result'):
     # Generate downloadable file
     b64, filename = generate_download_file(result, st.session_state.user_type)
     
-    # Create download button
-    download_button_str = f'<div class="download-btn"><a href="data:file/csv;base64,{b64}" download="{filename}" style="text-decoration:none;"><button style="background-color:#4CAF50;color:white;padding:10px 20px;border:none;border-radius:5px;cursor:pointer;font-size:16px;width:100%;">Download Check Results</button></a></div>'
+    # Create download button for PDF
+    download_button_str = f'<div class="download-btn"><a href="data:application/pdf;base64,{b64}" download="{filename}" style="text-decoration:none;"><button style="background-color:#4CAF50;color:white;padding:10px 20px;border:none;border-radius:5px;cursor:pointer;font-size:16px;width:100%;">Download PDF Report</button></a></div>'
     st.markdown(download_button_str, unsafe_allow_html=True)
     
     # Add a clear results button
