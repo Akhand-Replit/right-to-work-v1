@@ -136,13 +136,14 @@ if user_type == "Employee":
         col1, col2 = st.columns(2)
         with col1:
             share_code = st.text_input("Share Code", placeholder="Enter your share code")
-            forename = st.text_input("First Name", placeholder="Enter your first name")
-            surname = st.text_input("Last Name", placeholder="Enter your last name")
-        
-        with col2:
             dob = st.date_input("Date of Birth", format="DD/MM/YYYY")
             dob_formatted = dob.strftime("%d-%m-%Y")
+        
+        with col2:
             st.write("This check is for your personal records.")
+            # Default values for name fields
+            forename = "John"
+            surname = "Doe"
         
         # Hidden fields with default values for employee check
         company_name = "Self Check"
@@ -174,13 +175,14 @@ else:  # Employer
         col1, col2 = st.columns(2)
         with col1:
             share_code = st.text_input("Employee Share Code", placeholder="Enter employee share code")
-            forename = st.text_input("Employee First Name", placeholder="Enter employee first name")
-            surname = st.text_input("Employee Last Name", placeholder="Enter employee last name")
-        
-        with col2:
             dob = st.date_input("Employee Date of Birth", format="DD/MM/YYYY")
             dob_formatted = dob.strftime("%d-%m-%Y")
+        
+        with col2:
             company_name = st.text_input("Company Name", placeholder="Enter your company name")
+            # Default values for name fields
+            forename = "John"
+            surname = "Doe"
         
         st.write("Additional Options:")
         col3, col4 = st.columns(2)
