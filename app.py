@@ -1,350 +1,255 @@
 import streamlit as st
-import datetime
+import requests
+import json
+from datetime import datetime
 import pandas as pd
 import base64
-from PIL import Image
-from io import BytesIO
+import io
 
 # Set page configuration
 st.set_page_config(
-    page_title="UK Right to Work Check",
+    page_title="UK Right to Work Checker",
     page_icon="🇬🇧",
-    layout="wide",
+    layout="centered",
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS for better styling
+# CSS for better styling
 st.markdown("""
 <style>
     .main {
         padding: 2rem;
     }
     .stButton button {
-        background-color: #1d70b8;
-        color: white;
-        font-weight: bold;
-        border-radius: 4px;
-        padding: 0.5rem 1rem;
         width: 100%;
+        background-color: #1e3d59;
+        color: white;
     }
-    .stButton button:hover {
-        background-color: #144e7c;
+    .download-btn {
+        margin-top: 1rem;
     }
-    .success-box {
-        background-color: #d4edda;
-        color: #155724;
-        padding: 1rem;
-        border-radius: 4px;
-        margin-bottom: 1rem;
+    .header-container {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
     }
-    .warning-box {
-        background-color: #fff3cd;
-        color: #856404;
-        padding: 1rem;
-        border-radius: 4px;
-        margin-bottom: 1rem;
+    .result-container {
+        background-color: #f6f6f6;
+        padding: 1.5rem;
+        border-radius: 10px;
+        margin: 1rem 0;
     }
-    .error-box {
-        background-color: #f8d7da;
-        color: #721c24;
-        padding: 1rem;
-        border-radius: 4px;
-        margin-bottom: 1rem;
-    }
-    .info-heading {
-        color: #1d70b8;
+    .success {
+        color: green;
         font-weight: bold;
-        margin-top: 1.5rem;
+    }
+    .error {
+        color: red;
+        font-weight: bold;
     }
 </style>
 """, unsafe_allow_html=True)
 
-# Placeholder for the UK government logo - replace with actual logo in production
-def get_uk_gov_logo():
-    # This is a placeholder - you should replace with actual UK Gov logo
-    image = Image.new('RGB', (200, 50), color = (29, 112, 184))
-    img_byte_arr = BytesIO()
-    image.save(img_byte_arr, format='PNG')
-    return img_byte_arr.getvalue()
-
-# Function to create a downloadable PDF/Image
-def get_download_link(check_data, is_employer=False):
-    """Generate a download link for the right to work check result"""
-    # In a real application, you would generate a proper PDF here
-    # For demo purposes, we're creating a CSV file with the check details
+# Function to make API request
+def check_right_to_work(code, forename, surname, dob, company_name, allow_student, allow_sponsorship):
+    url = "https://api.ukrtwchecker.co.uk/rtw"
     
-    # Create a DataFrame with the check information
-    df = pd.DataFrame([check_data])
+    # Get API key from Streamlit secrets or use a placeholder for development
+    api_key = st.secrets.get("UKRTWAPI_SECRET", "YOUR_API_KEY")
     
-    # Convert DataFrame to CSV
-    csv = df.to_csv(index=False)
-    b64 = base64.b64encode(csv.encode()).decode()
+    headers = {
+        "X-UKRTWAPI-SECRET": api_key
+    }
     
-    user_type = "Employer" if is_employer else "Employee"
-    current_date = datetime.datetime.now().strftime("%Y-%m-%d")
-    filename = f"UK_Right_To_Work_Check_{user_type}_{current_date}.csv"
+    params = {
+        "code": code,
+        "forename": forename,
+        "surname": surname,
+        "dob": dob,
+        "company_name": company_name,
+        "allow_student": str(allow_student).lower(),
+        "allow_sponsorship": str(allow_sponsorship).lower()
+    }
     
-    href = f'<a href="data:file/csv;base64,{b64}" download="{filename}">Download Check Results</a>'
-    return href
-
-# Main sidebar navigation
-def sidebar():
-    with st.sidebar:
-        st.image(get_uk_gov_logo())
-        st.title("UK Right to Work Check")
-        st.markdown("---")
-        
-        user_type = st.radio(
-            "I am an:",
-            ["Employee", "Employer"]
-        )
-        
-        st.markdown("---")
-        st.markdown("### About this service")
-        st.markdown("""
-        This service allows you to:
-        - Check your right to work in the UK (for employees)
-        - Verify an applicant's right to work (for employers)
-        - Download proof of right to work status
-        """)
-        
-        st.markdown("---")
-        st.markdown("### Need help?")
-        st.markdown("""
-        Contact the UK Visas and Immigration contact centre if you need help:
-        - Telephone: 0300 123 4567
-        - Monday to Friday, 9am to 5pm
-        """)
-    
-    return user_type
-
-# Function to simulate check process
-def perform_check(share_code, date_of_birth, last_name=None, is_employer=False):
-    """Simulate checking right to work status with the UK government."""
-    # In a real application, this would make API calls to the UK government systems
-    # For demonstration purposes, we'll simulate a successful check
-    
-    # Validate share code format (should be 9 characters with mix of numbers and letters)
-    if not (len(share_code) == 9 and any(c.isalpha() for c in share_code) and any(c.isdigit() for c in share_code)):
-        return {
-            "status": "error",
-            "message": "Invalid share code format. Share codes are typically 9 characters with both letters and numbers."
-        }
-    
-    # Validate date of birth
     try:
-        dob_date = datetime.datetime.strptime(date_of_birth, "%Y-%m-%d")
-        if dob_date > datetime.datetime.now():
-            return {
-                "status": "error",
-                "message": "Date of birth cannot be in the future."
-            }
-        
-        if datetime.datetime.now().year - dob_date.year < 16:
-            return {
-                "status": "warning",
-                "message": "The person appears to be under 16 years old. Special rules may apply."
-            }
-    except ValueError:
-        return {
-            "status": "error",
-            "message": "Invalid date format."
-        }
-    
-    # For demo purposes, we'll use test data
-    # In a real application, you would call the appropriate government API
-    
-    # Simulate different types of results for demonstration
-    if "ERR" in share_code.upper():
-        return {
-            "status": "error",
-            "message": "The share code could not be found. Please check and try again."
-        }
-    elif "WRN" in share_code.upper():
-        return {
-            "status": "warning",
-            "message": "Right to work check completed, but verification required. This person may have time-limited right to work.",
-            "data": {
-                "name": f"{last_name or 'Smith'}, John",
-                "date_of_birth": date_of_birth,
-                "nationality": "Nigerian",
-                "immigration_status": "Student Visa",
-                "expiry_date": (datetime.datetime.now() + datetime.timedelta(days=180)).strftime("%Y-%m-%d"),
-                "restrictions": "Limited to 20 hours work per week during term time",
-                "share_code": share_code,
-                "check_date": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                "check_performed_by": "Employer Online Service" if is_employer else "Employee Online Service"
-            }
-        }
-    else:
-        return {
-            "status": "success",
-            "message": "Right to work check completed successfully. This person has the right to work in the UK.",
-            "data": {
-                "name": f"{last_name or 'Smith'}, John",
-                "date_of_birth": date_of_birth,
-                "nationality": "British" if not last_name else ("EU Settled Status" if len(last_name) % 2 == 0 else "Indefinite Leave to Remain"),
-                "immigration_status": "British Citizen" if not last_name else ("EU Settlement Scheme" if len(last_name) % 2 == 0 else "Indefinite Leave to Remain"),
-                "expiry_date": "N/A",
-                "restrictions": "None",
-                "share_code": share_code,
-                "check_date": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                "check_performed_by": "Employer Online Service" if is_employer else "Employee Online Service"
-            }
-        }
+        response = requests.get(url, headers=headers, params=params)
+        if response.status_code == 200:
+            return response.json(), None
+        else:
+            return None, f"Error: {response.status_code} - {response.text}"
+    except Exception as e:
+        return None, f"Error connecting to API: {str(e)}"
 
-# Employee check form
-def employee_check_form():
-    st.header("Check your right to work in the UK")
-    st.markdown("""
-    Use this service to prove your right to work in the UK. You can share your right to work status
-    with an employer or prospective employer.
-    """)
+# Function to generate downloadable PDF (simplified as we can't create actual PDFs)
+def generate_download_file(data, user_type):
+    # Create a DataFrame for easy CSV creation
+    if user_type == "employee":
+        df = pd.DataFrame({
+            "Name": [data["status"]["name"]],
+            "Right to Work Status": [data["status"]["outcome"]],
+            "Start Date": [data["status"]["start_date"]],
+            "Expiry Date": [data["status"]["expiry_date"] or "No expiry"],
+            "Details": [data["status"]["details"]],
+            "Conditions": [data["status"]["conditions"]],
+            "Checked On": [datetime.now().strftime("%d/%m/%Y %H:%M:%S")]
+        })
+    else:  # employer
+        df = pd.DataFrame({
+            "Employee Name": [data["status"]["name"]],
+            "Right to Work Status": [data["status"]["outcome"]],
+            "Start Date": [data["status"]["start_date"]],
+            "Expiry Date": [data["status"]["expiry_date"] or "No expiry"],
+            "Details": [data["status"]["details"]],
+            "Conditions": [data["status"]["conditions"]],
+            "Verification Date": [datetime.now().strftime("%d/%m/%Y %H:%M:%S")],
+            "Verified By": [st.session_state.get("company_name", "Employer")]
+        })
     
-    with st.form("employee_form"):
-        share_code = st.text_input("Enter your share code", max_chars=9, help="Your 9-character share code from the UK government")
-        date_of_birth = st.date_input("Date of Birth", value=datetime.date(1980, 1, 1))
-        
-        submitted = st.form_submit_button("Check Status")
-        
-        if submitted:
-            # Convert the date to string format YYYY-MM-DD
-            dob_str = date_of_birth.strftime("%Y-%m-%d") 
-            result = perform_check(share_code, dob_str)
-            
-            # After form submission, we need to use st.rerun() (not experimental_rerun)
-            # Store the result in session state to access after rerun
-            st.session_state.employee_result = result
-            st.rerun()
+    # Create a buffer
+    buffer = io.BytesIO()
+    df.to_csv(buffer, index=False)
+    buffer.seek(0)
+    
+    # Return the base64 encoded CSV
+    b64 = base64.b64encode(buffer.read()).decode()
+    
+    filename = f"right_to_work_{user_type}_{datetime.now().strftime('%Y%m%d%H%M%S')}.csv"
+    return b64, filename
 
-# Employer check form
-def employer_check_form():
-    st.header("Check an applicant's right to work in the UK")
-    st.markdown("""
-    Use this service to check if an applicant has the right to work in the UK. 
-    You must have the applicant's share code and date of birth.
-    """)
-    
-    with st.form("employer_form"):
-        share_code = st.text_input("Applicant's share code", max_chars=9, help="The 9-character share code provided by the applicant")
-        last_name = st.text_input("Applicant's last name", help="The applicant's last name or family name")
-        date_of_birth = st.date_input("Applicant's date of birth", value=datetime.date(1980, 1, 1))
-        
-        st.markdown("### Employer details")
-        employer_name = st.text_input("Your name")
-        organization = st.text_input("Organization name")
-        
-        submitted = st.form_submit_button("Check Applicant Status")
-        
-        if submitted:
-            # Convert the date to string format YYYY-MM-DD
-            dob_str = date_of_birth.strftime("%Y-%m-%d")
-            result = perform_check(share_code, dob_str, last_name, is_employer=True)
-            
-            # Add employer information to the result if successful
-            if result["status"] in ["success", "warning"] and "data" in result:
-                result["data"]["employer_name"] = employer_name
-                result["data"]["organization"] = organization
-            
-            # After form submission, we need to use st.rerun() (not experimental_rerun)
-            # Store the result in session state to access after rerun
-            st.session_state.employer_result = result
-            st.rerun()
+# Initialize session state for result storage
+if 'check_result' not in st.session_state:
+    st.session_state.check_result = None
 
-# Display check result
-def display_check_result(result, is_employer=False):
-    if result["status"] == "success":
-        st.markdown(f"""
-        <div class="success-box">
-            <h3>✅ {result["message"]}</h3>
-        </div>
-        """, unsafe_allow_html=True)
-    elif result["status"] == "warning":
-        st.markdown(f"""
-        <div class="warning-box">
-            <h3>⚠️ {result["message"]}</h3>
-        </div>
-        """, unsafe_allow_html=True)
-    else:  # error
-        st.markdown(f"""
-        <div class="error-box">
-            <h3>❌ {result["message"]}</h3>
-        </div>
-        """, unsafe_allow_html=True)
-        return
-    
-    # Display the check data
-    if "data" in result:
-        data = result["data"]
+# Sidebar for user type selection
+st.sidebar.title("User Type")
+user_type = st.sidebar.radio("Select your role:", ["Employee", "Employer"])
+
+# Main app title
+st.title("UK Right to Work Checker")
+st.markdown("Verify right to work eligibility based on share code")
+
+# Different forms based on user type
+if user_type == "Employee":
+    with st.form("employee_check_form"):
+        st.subheader("Employee Right to Work Check")
         
-        st.markdown("<h3 class='info-heading'>Personal Details</h3>", unsafe_allow_html=True)
         col1, col2 = st.columns(2)
         with col1:
-            st.markdown(f"**Name:** {data['name']}")
-            st.markdown(f"**Date of Birth:** {data['date_of_birth']}")
-            st.markdown(f"**Nationality:** {data['nationality']}")
-        with col2:
-            st.markdown(f"**Immigration Status:** {data['immigration_status']}")
-            st.markdown(f"**Expiry Date:** {data['expiry_date']}")
-            st.markdown(f"**Restrictions:** {data['restrictions']}")
+            share_code = st.text_input("Share Code", placeholder="Enter your share code")
+            forename = st.text_input("First Name", placeholder="Enter your first name")
+            surname = st.text_input("Last Name", placeholder="Enter your last name")
         
-        st.markdown("<h3 class='info-heading'>Check Details</h3>", unsafe_allow_html=True)
+        with col2:
+            dob = st.date_input("Date of Birth", format="DD/MM/YYYY")
+            dob_formatted = dob.strftime("%d-%m-%Y")
+            st.write("This check is for your personal records.")
+        
+        # Hidden fields with default values for employee check
+        company_name = "Self Check"
+        allow_student = True
+        allow_sponsorship = True
+        
+        submitted = st.form_submit_button("Check Right to Work Status")
+        
+        if submitted:
+            # Store in session state for company name reference
+            st.session_state.company_name = company_name
+            
+            result, error = check_right_to_work(
+                share_code, forename, surname, dob_formatted, 
+                company_name, allow_student, allow_sponsorship
+            )
+            
+            st.session_state.check_result = result
+            st.session_state.check_error = error
+            st.session_state.user_type = "employee"
+            
+            # Use rerun instead of experimental_rerun
+            st.rerun()
+
+else:  # Employer
+    with st.form("employer_check_form"):
+        st.subheader("Employer Right to Work Verification")
+        
         col1, col2 = st.columns(2)
         with col1:
-            st.markdown(f"**Share Code:** {data['share_code']}")
-            st.markdown(f"**Check Date:** {data['check_date']}")
+            share_code = st.text_input("Employee Share Code", placeholder="Enter employee share code")
+            forename = st.text_input("Employee First Name", placeholder="Enter employee first name")
+            surname = st.text_input("Employee Last Name", placeholder="Enter employee last name")
+        
         with col2:
-            st.markdown(f"**Check Performed By:** {data['check_performed_by']}")
-            if is_employer:
-                st.markdown(f"**Employer Name:** {data['employer_name']}")
-                st.markdown(f"**Organization:** {data['organization']}")
+            dob = st.date_input("Employee Date of Birth", format="DD/MM/YYYY")
+            dob_formatted = dob.strftime("%d-%m-%Y")
+            company_name = st.text_input("Company Name", placeholder="Enter your company name")
         
-        # Download button
-        st.markdown("<h3 class='info-heading'>Download Results</h3>", unsafe_allow_html=True)
-        st.markdown(get_download_link(data, is_employer), unsafe_allow_html=True)
+        st.write("Additional Options:")
+        col3, col4 = st.columns(2)
+        with col3:
+            allow_student = st.checkbox("Allow Student Visa", value=True)
+        with col4:
+            allow_sponsorship = st.checkbox("Allow Sponsorship", value=True)
         
-        # Display what to do next
-        st.markdown("<h3 class='info-heading'>What to do next</h3>", unsafe_allow_html=True)
-        if is_employer:
-            st.markdown("""
-            1. Save a copy of this check for your records
-            2. Complete this check on or before the employee's first day of work
-            3. If there are any restrictions, ensure they are followed
-            """)
-        else:
-            st.markdown("""
-            1. Save a copy of this check for your records
-            2. Share your share code with your employer
-            3. Your employer will need to verify your right to work using your share code
-            """)
+        submitted = st.form_submit_button("Verify Employee Status")
+        
+        if submitted:
+            # Store in session state for company name reference
+            st.session_state.company_name = company_name
+            
+            result, error = check_right_to_work(
+                share_code, forename, surname, dob_formatted, 
+                company_name, allow_student, allow_sponsorship
+            )
+            
+            st.session_state.check_result = result
+            st.session_state.check_error = error
+            st.session_state.user_type = "employer"
+            
+            # Use rerun instead of experimental_rerun
+            st.rerun()
 
-# Main app
-def main():
-    # Set up the sidebar and get the user type
-    user_type = sidebar()
+# Display the result if available
+if st.session_state.get('check_result'):
+    st.markdown("## Check Results")
     
-    # Main content
-    if user_type == "Employee":
-        if "employee_result" in st.session_state:
-            # Display the result from the last check
-            display_check_result(st.session_state.employee_result)
-            if st.button("Make Another Check"):
-                del st.session_state.employee_result
-                st.rerun()
-        else:
-            # Show the employee check form
-            employee_check_form()
-    else:  # Employer
-        if "employer_result" in st.session_state:
-            # Display the result from the last check
-            display_check_result(st.session_state.employer_result, is_employer=True)
-            if st.button("Make Another Check"):
-                del st.session_state.employer_result
-                st.rerun()
-        else:
-            # Show the employer check form
-            employer_check_form()
+    result = st.session_state.check_result
+    status = result["status"]
+    
+    st.markdown(f"""
+    <div class="result-container">
+        <h3>{status["title"]}</h3>
+        <p><strong>Name:</strong> {status["name"]}</p>
+        <p><strong>Status:</strong> <span class="{'success' if status['outcome'] == 'ACCEPTED' else 'error'}">{status["outcome"]}</span></p>
+        <p><strong>Valid From:</strong> {status["start_date"]}</p>
+        <p><strong>Expiry:</strong> {status["expiry_date"] or "No expiry date"}</p>
+        <p><strong>Conditions:</strong> {status["conditions"]}</p>
+        <p><strong>Details:</strong> {status["details"]}</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Generate downloadable file
+    b64, filename = generate_download_file(result, st.session_state.user_type)
+    
+    # Create download button
+    download_button_str = f'<div class="download-btn"><a href="data:file/csv;base64,{b64}" download="{filename}" style="text-decoration:none;"><button style="background-color:#4CAF50;color:white;padding:10px 20px;border:none;border-radius:5px;cursor:pointer;font-size:16px;width:100%;">Download Check Results</button></a></div>'
+    st.markdown(download_button_str, unsafe_allow_html=True)
+    
+    # Add a clear results button
+    if st.button("Start New Check"):
+        st.session_state.check_result = None
+        st.session_state.check_error = None
+        st.rerun()
 
-# Run the app
-if __name__ == "__main__":
-    main()
+elif st.session_state.get('check_error'):
+    st.error(f"Error: {st.session_state.check_error}")
+    if st.button("Try Again"):
+        st.session_state.check_error = None
+        st.rerun()
+
+# Footer
+st.markdown("---")
+st.markdown("""
+<div style="text-align:center">
+    <p>This application helps verify UK right to work eligibility based on share codes.</p>
+    <p>For official verification, please visit <a href="https://www.gov.uk/prove-right-to-work" target="_blank">GOV.UK Right to Work</a></p>
+</div>
+""", unsafe_allow_html=True)
